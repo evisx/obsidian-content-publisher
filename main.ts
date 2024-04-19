@@ -1,5 +1,6 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Editor, MarkdownView, Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, Settings, SettingTab } from 'src/SettingTab'
+import { MESSAGES, checkSettingOfAbPath } from 'src/utils'
 
 export default class ContentPublisher extends Plugin {
 	settings: Settings;
@@ -18,6 +19,7 @@ export default class ContentPublisher extends Plugin {
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
 		// const statusBarItemEl = this.addStatusBarItem();
 		// statusBarItemEl.setText('Status Bar Text');
+		this._addCommandValidateAbPath()
 
 		// This adds a simple command that can be triggered anywhere
 		// this.addCommand({
@@ -79,20 +81,22 @@ export default class ContentPublisher extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	_checkProjectContentAbPathSetting(validNoticed = false): void {
+		if (checkSettingOfAbPath(this, this.settings.projectContentAbFolder, MESSAGES.invalidProjectContentAbFolder)) {
+			if (validNoticed) {
+				new Notice(`Valid path: ${this.settings.projectContentAbFolder}`);
+			}
+		} else {
+			new Notice(`Invalid path: ${this.settings.projectContentAbFolder}`);
+		}
+	}
+
+	_addCommandValidateAbPath(): void {
+		this.addCommand({
+			id: "validate-ab-path",
+			name: "Validate absolute project content path",
+			editorCallback: (_editor: Editor, _view: MarkdownView) => this._checkProjectContentAbPathSetting(true)
+		});
+	}
 }
-
-// class SampleModal extends Modal {
-// 	constructor(app: App) {
-// 		super(app);
-// 	}
-
-// 	onOpen() {
-// 		const {contentEl} = this;
-// 		contentEl.setText('Woah!');
-// 	}
-
-// 	onClose() {
-// 		const {contentEl} = this;
-// 		contentEl.empty();
-// 	}
-// }

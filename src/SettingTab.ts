@@ -2,13 +2,13 @@ import { App, PluginSettingTab, Setting } from 'obsidian';
 import ContentPublisher from '../main';
 
 export interface Settings {
-    vaultBlogFolder: string;
     projectContentAbFolder: string;
+    vaultBlogFolder: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-    vaultBlogFolder: "",
     projectContentAbFolder: "",
+    vaultBlogFolder: "",
 }
 
 export class SettingTab extends PluginSettingTab {
