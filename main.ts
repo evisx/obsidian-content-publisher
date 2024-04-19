@@ -96,7 +96,7 @@ export default class ContentPublisher extends Plugin {
 		this.addCommand({
 			id: "validate-ab-path",
 			name: "Validate absolute project content path",
-			editorCallback: (_editor: Editor, _view: MarkdownView) => this._checkProjectContentAbPathSetting(true)
+			callback: () => this._checkProjectContentAbPathSetting(true)
 		});
 	}
 }
