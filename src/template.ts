@@ -1,4 +1,5 @@
-import { App, TFile, FrontMatterCache } from 'obsidian';
+import { App, TFile, FrontMatterCache, Notice } from 'obsidian';
+import { Moment } from 'moment';
 import ContentPublisher from '../main';
 
 export class TemplateProcessor {
@@ -21,7 +22,7 @@ export class TemplateProcessor {
     }
 
     evalTemplate(template: string) {
-        return template.replace(/{{(.*?)}}/g, (match, expr) =>
+        return template.replace(/{{(.*?)}}/g, (_match, expr) =>
             this.evalPart(expr),
         );
     }
@@ -29,11 +30,15 @@ export class TemplateProcessor {
 
 export interface MetadataTemplateVariables {
     file: TFile;
-    frontmatter?: FrontMatterCache;
+    frontmatter?: FrontMatterCache | null;
+    nowTime?: Moment;
+    pubTime?: Moment;
+    modTime?: Moment;
 }
 
 export class MetadataTemplateProcessor extends TemplateProcessor {
     app: App;
+    inited: Record<string, boolean>;
 
     constructor(
         plugin: ContentPublisher,
@@ -43,16 +48,78 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         },
     ) {
         const { app } = plugin;
-        if (!variables.frontmatter) {
-            variables.frontmatter = app.metadataCache.getFileCache(
-                variables.file,
-            )?.frontmatter;
-        }
         const metadataVariables: MetadataTemplateVariables = {
             ...variables,
             // initial more here
+            nowTime: window.moment(),
         };
         super(metadataVariables);
         this.app = app;
+        this.inited = {};
+    }
+
+    evalTemplate(template: string) {
+        return template.replace(/{{(.*?)}}/g, (_match, expr) => {
+            this.expressionHandler(expr);
+            return this.evalPart(expr);
+        });
+    }
+
+    expressionHandler(expr: string) {
+        const matches = expr.match(/(frontmatter)|(pubTime)|(modTime)/g);
+        // load date when needed
+        if (matches) {
+            matches.forEach((match) => {
+                if (this.inited[match]) return;
+                switch (match) {
+                    case 'frontmatter':
+                        this.initFrontmatter();
+                        break;
+                    case 'pubTime':
+                        this.initPubTime();
+                        break;
+                    case 'modTime':
+                        this.initModTime();
+                        break;
+                }
+                this.inited[match] = true;
+            });
+        }
+    }
+
+    initFrontmatter() {
+        if (this.variables.frontmatter !== undefined) {
+            return;
+        }
+        const file = this.variables.file;
+        const cache = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        if (cache === undefined) {
+            new Notice(`${file.basename} has no frontmatter`);
+        }
+        this.setVariable('frontmatter', cache ? cache : null);
+    }
+
+    initPubTime() {
+        if (this.variables.pubTime !== undefined) {
+            return;
+        }
+        this.initFrontmatter(); // depend on frontmatter
+        const ts = this.variables.frontmatter['content-publish-ts'];
+        this.setVariable(
+            'pubTime',
+            ts ? window.moment(ts) : this.variables.nowTime,
+        );
+    }
+
+    initModTime() {
+        if (this.variables.modTime !== undefined) {
+            return;
+        }
+        this.initFrontmatter(); // depend on frontmatter
+        const ts = this.variables.frontmatter['content-update-ts'];
+        this.setVariable(
+            'modTime',
+            ts ? window.moment(ts) : this.variables.nowTime,
+        );
     }
 }

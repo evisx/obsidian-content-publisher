@@ -29,6 +29,10 @@ export const DEFAULT_SETTINGS: Settings = {
             name: 'slug',
             template: '{{frontmatter.slug}}',
         },
+        {
+            name: 'draft',
+            template: '{{frontmatter.draft}}',
+        },
     ],
 };
 
@@ -97,7 +101,9 @@ export class SettingTab extends PluginSettingTab {
     _addNewMetadataTemplateButton(): void {
         new Setting(this.containerEl)
             .setName('front matter mapping')
-            .setDesc('Add new front matter mapping template')
+            .setDesc(
+                'Add new front matter mapping template to match your collection schema.',
+            )
             .addButton((button: ButtonComponent) => {
                 button
                     .setTooltip('Add additional front matter mapping template')
