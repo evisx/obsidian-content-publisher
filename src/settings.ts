@@ -8,22 +8,34 @@ export interface MetadataTemplate {
 }
 
 export interface Settings {
+    noteFolder: string;
     publishToAbFolder: string;
-    contentFolder: string;
     metadataFormats: MetadataTemplate[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+    noteFolder: '',
     publishToAbFolder: '',
-    contentFolder: '',
     metadataFormats: [
-        {
-            name: 'author',
-            template: 'Publisher',
-        },
         {
             name: 'title',
             template: '{{file.basename}}',
+        },
+        {
+            name: 'author',
+            template: '{{frontmatter.author}}',
+        },
+        {
+            name: 'pubDatetime',
+            template: '{{pubTime.format()}}',
+        },
+        {
+            name: 'modDatetime',
+            template: '{{modTime.format()}}',
+        },
+        {
+            name: 'featured',
+            template: 'false',
         },
         {
             name: 'slug',
@@ -32,6 +44,14 @@ export const DEFAULT_SETTINGS: Settings = {
         {
             name: 'draft',
             template: '{{frontmatter.draft}}',
+        },
+        {
+            name: 'tags',
+            template: '{{array(frontmatter.tags)}}',
+        },
+        {
+            name: 'description',
+            template: '{{frontmatter.description}}',
         },
     ],
 };
@@ -48,8 +68,8 @@ export class SettingTab extends PluginSettingTab {
         this.containerEl.empty();
 
         this._addSettingHeader();
+        this._addNoteFolder();
         this._addProjectContentAbFolder();
-        this._addVaultBlogFoler();
         this._addNewMetadataTemplateButton();
         this._addDisplayMetadataFormats();
     }
@@ -62,6 +82,21 @@ export class SettingTab extends PluginSettingTab {
         this.containerEl.createEl('h2', {
             text: 'Content Publisher General Setting.',
         });
+    }
+
+    _addNoteFolder(): void {
+        new Setting(this.containerEl)
+            .setName('blog location')
+            .setDesc('Files in this folder will be expose to blog project.')
+            .addText((text) =>
+                text
+                    .setPlaceholder('Example: folder1/folder2')
+                    .setValue(this.plugin.settings.noteFolder)
+                    .onChange(async (value) => {
+                        this.plugin.settings.noteFolder = value;
+                        await this.plugin.saveSettings();
+                    }),
+            );
     }
 
     _addProjectContentAbFolder(): void {
@@ -78,21 +113,6 @@ export class SettingTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.publishToAbFolder)
                     .onChange(async (value) => {
                         this.plugin.settings.publishToAbFolder = value;
-                        await this.plugin.saveSettings();
-                    }),
-            );
-    }
-
-    _addVaultBlogFoler(): void {
-        new Setting(this.containerEl)
-            .setName('blog location')
-            .setDesc('Files in this folder will be expose to blog project.')
-            .addText((text) =>
-                text
-                    .setPlaceholder('Example: folder1/folder2')
-                    .setValue(this.plugin.settings.contentFolder)
-                    .onChange(async (value) => {
-                        this.plugin.settings.contentFolder = value;
                         await this.plugin.saveSettings();
                     }),
             );

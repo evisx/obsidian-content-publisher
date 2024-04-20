@@ -1,7 +1,7 @@
 // import { Editor, MarkdownView, TFile, Notice, Plugin } from 'obsidian';
 import { TFile, Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, Settings, SettingTab } from 'src/settings';
-import { ContentHandler } from 'src/content-handler';
+import { ContentHandler } from 'src/handlers';
 import {
     checkSettingOfAbPath,
     resolvePublishPath,
@@ -47,6 +47,12 @@ export default class ContentPublisher extends Plugin {
                 );
             };
         }
+        // TODO: if respect update-ts
+        // TODO: update frontmatter to note
+        // content-publish-url: https://evisx.me/posts/homebre-opnjdk
+        // content-publish-ts:
+        // content-update-ts:
+        // content-auto-slug:
         const yaml = this.contentHandler.getPublishedYAML(file);
         const content = await this.contentHandler.getPublishedText(file);
 
@@ -77,14 +83,14 @@ export default class ContentPublisher extends Plugin {
 
     _checkNoteInBlogPathSetting(file: TFile): boolean {
         if (
-            new RegExp('^' + this.settings.contentFolder + '.*\\.md$').test(
+            new RegExp('^' + this.settings.noteFolder + '.*\\.md$').test(
                 file.path,
             )
         ) {
             return true;
         }
         new Notice(
-            `Not in Blog Folder: ${this.settings.contentFolder} Or Not a Markdown File`,
+            `Not in Blog Folder: ${this.settings.noteFolder} Or Not a Markdown File`,
         );
         return false;
     }

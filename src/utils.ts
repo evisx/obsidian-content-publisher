@@ -20,8 +20,8 @@ export function resolvePublishPath(
     plugin: ContentPublisher,
     file: TFile,
 ): string {
-    const { publishToAbFolder, contentFolder } = plugin.settings;
-    return resolve(publishToAbFolder, relative(contentFolder, file.path));
+    const { publishToAbFolder, noteFolder } = plugin.settings;
+    return resolve(publishToAbFolder, relative(noteFolder, file.path));
 }
 
 export function writeContentToAbPath(

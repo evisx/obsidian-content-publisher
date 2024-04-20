@@ -2,7 +2,9 @@ import { App, TFile, FrontMatterCache, Notice } from 'obsidian';
 import { Moment } from 'moment';
 import ContentPublisher from '../main';
 
-export class TemplateProcessor {
+const arrayHandler = (arr: string[]) => `\n  - ${arr.join('\n  - ')}`;
+
+class TemplateProcessor {
     constructor(public variables: Record<string, any>) {}
 
     setVariable(name: string, value: any) {
@@ -30,6 +32,7 @@ export class TemplateProcessor {
 
 export interface MetadataTemplateVariables {
     file: TFile;
+    array: (arr: string[]) => string; // handle array to YAML list
     frontmatter?: FrontMatterCache | null;
     nowTime?: Moment;
     pubTime?: Moment;
@@ -51,6 +54,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         const metadataVariables: MetadataTemplateVariables = {
             ...variables,
             // initial more here
+            array: arrayHandler,
             nowTime: window.moment(),
         };
         super(metadataVariables);
