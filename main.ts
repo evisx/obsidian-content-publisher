@@ -1,28 +1,42 @@
 // import { Editor, MarkdownView, TFile, Notice, Plugin } from 'obsidian';
 import { TFile, Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, Settings, SettingTab } from 'src/settings';
-import { ContentHandler } from 'src/handlers';
+import {
+    MetaVariables,
+    MetadataTemplateProcessorManager,
+    MetadataTemplateProcessor,
+} from 'src/template';
+import { NoteHandler, ContentHandler } from 'src/handlers';
 import {
     checkSettingOfAbPath,
     resolvePublishPath,
     writeContentToAbPath,
+    pinyinfy,
 } from 'src/utils';
 
 export default class ContentPublisher extends Plugin {
+    public pinyin: any;
     settings: Settings;
+    noteHandler: NoteHandler;
     contentHandler: ContentHandler;
+    tplProccessorManager: MetadataTemplateProcessorManager;
 
     async onload() {
         await this.loadSettings();
+        this.pinyin = pinyinfy;
 
         this._addCommandValidateAbPath();
         this._addCommandPublishCurrentNote();
 
-        this.addSettingTab(new SettingTab(this.app, this));
+        this.addSettingTab(new SettingTab(this));
+        this.noteHandler = new NoteHandler(this);
         this.contentHandler = new ContentHandler(this);
+        this.tplProccessorManager = new MetadataTemplateProcessorManager(this);
     }
 
-    onunload() {}
+    onunload() {
+        this.clearTemplateProcessor();
+    }
 
     async loadSettings() {
         this.settings = Object.assign(
@@ -36,11 +50,16 @@ export default class ContentPublisher extends Plugin {
         await this.saveData(this.settings);
     }
 
-    async publishSingleNote(
-        file: TFile,
-        callback: () => void | null,
-    ): Promise<void> {
-        if (!callback) {
+    getTemplateProcessor(variables: MetaVariables): MetadataTemplateProcessor {
+        return this.tplProccessorManager.getProcessor(variables);
+    }
+
+    clearTemplateProcessor() {
+        this.tplProccessorManager.clear();
+    }
+
+    async publishSingleNote(file: TFile, callback?: () => void): Promise<void> {
+        if (callback === undefined) {
             callback = () => {
                 new Notice(
                     `publish ${file.basename} to ${this.settings.publishToAbFolder}`,
@@ -48,12 +67,11 @@ export default class ContentPublisher extends Plugin {
             };
         }
         // TODO: if respect update-ts
-        // TODO: update frontmatter to note
-        // content-publish-url: https://evisx.me/posts/homebre-opnjdk
-        // content-publish-ts:
-        // content-update-ts:
-        // content-auto-slug:
-        const yaml = this.contentHandler.getPublishedYAML(file);
+        const frontmatter = await this.noteHandler.updateFrontmatter(file);
+        const yaml = this.contentHandler.getPublishedYAML({
+            file: file,
+            frontmatter: frontmatter,
+        });
         const content = await this.contentHandler.getPublishedText(file);
 
         writeContentToAbPath(
@@ -81,7 +99,7 @@ export default class ContentPublisher extends Plugin {
         return true;
     }
 
-    _checkNoteInBlogPathSetting(file: TFile): boolean {
+    _checkNoteInSourcePathSetting(file: TFile): boolean {
         if (
             new RegExp('^' + this.settings.noteFolder + '.*\\.md$').test(
                 file.path,
@@ -90,7 +108,7 @@ export default class ContentPublisher extends Plugin {
             return true;
         }
         new Notice(
-            `Not in Blog Folder: ${this.settings.noteFolder} Or Not a Markdown File`,
+            `Not in Source Folder: ${this.settings.noteFolder} Or Not a Markdown File`,
         );
         return false;
     }
@@ -106,13 +124,13 @@ export default class ContentPublisher extends Plugin {
     _addCommandPublishCurrentNote(): void {
         this.addCommand({
             id: 'Publish-current-note',
-            name: 'Publish current note to blog',
+            name: 'Publish current note',
             callback: () => {
                 if (!this._checkProjectContentAbPathSetting()) {
                     return;
                 }
                 const file = this.app.workspace.getActiveFile();
-                if (!file || !this._checkNoteInBlogPathSetting(file)) {
+                if (!file || !this._checkNoteInSourcePathSetting(file)) {
                     return;
                 }
                 this.publishSingleNote(file, () => {
@@ -120,6 +138,7 @@ export default class ContentPublisher extends Plugin {
                         `Your note has been published! At ${this.settings.publishToAbFolder}`,
                     );
                 });
+                this.clearTemplateProcessor();
             },
         });
     }

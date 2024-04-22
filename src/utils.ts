@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
 import { ErrorModal } from './modals';
 import ContentPublisher from '../main';
+import pinyin from 'pinyin';
 
 export function checkSettingOfAbPath(
     plugin: ContentPublisher,
@@ -54,4 +55,17 @@ export function arraymove<T>(
     const element = arr[fromIndex];
     arr[fromIndex] = arr[toIndex];
     arr[toIndex] = element;
+}
+
+export function removeEmoji(str: string): string {
+    return str.replace(
+        /([\uE000-\uF8FF]|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDDFF])/g,
+        '',
+    );
+}
+
+export function pinyinfy(str: string, sp: string = '-'): string {
+    return pinyin(str, { style: 'normal' })
+        .map((arr: string[]) => arr[0])
+        .join(sp);
 }

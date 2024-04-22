@@ -10,12 +10,21 @@ export interface MetadataTemplate {
 export interface Settings {
     noteFolder: string;
     publishToAbFolder: string;
+    publishUrlPrefix: string;
+    publishSlugTemplate: string;
     metadataFormats: MetadataTemplate[];
+    wikilinkFormats: {
+        major: string;
+        minor: string;
+        notFound: string;
+    };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
     noteFolder: '',
     publishToAbFolder: '',
+    publishUrlPrefix: '',
+    publishSlugTemplate: '{{buiSlug}}',
     metadataFormats: [
         {
             name: 'title',
@@ -39,7 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
         },
         {
             name: 'slug',
-            template: '{{frontmatter.slug}}',
+            template: '{{pubSlug}}',
         },
         {
             name: 'draft',
@@ -54,13 +63,18 @@ export const DEFAULT_SETTINGS: Settings = {
             template: '{{frontmatter.description}}',
         },
     ],
+    wikilinkFormats: {
+        major: '[{{refer}}]({{pubUrl}})',
+        minor: '[{{refer}}]({{frontmatter.url}})',
+        notFound: '[{{refer}}](https://blog.com/404)',
+    },
 };
 
 export class SettingTab extends PluginSettingTab {
     plugin: ContentPublisher;
 
-    constructor(app: App, plugin: ContentPublisher) {
-        super(app, plugin);
+    constructor(plugin: ContentPublisher) {
+        super(plugin.app, plugin);
         this.plugin = plugin;
     }
 
@@ -70,8 +84,12 @@ export class SettingTab extends PluginSettingTab {
         this._addSettingHeader();
         this._addNoteFolder();
         this._addProjectContentAbFolder();
+        this._addPublishUrlPrefix();
+        this._addPublishSlugTemplate();
         this._addNewMetadataTemplateButton();
         this._addDisplayMetadataFormats();
+        this._addWikilinkTemplateDescription();
+        this._addDisplayWikilinkFormats();
     }
 
     redisplay(): void {
@@ -86,8 +104,10 @@ export class SettingTab extends PluginSettingTab {
 
     _addNoteFolder(): void {
         new Setting(this.containerEl)
-            .setName('blog location')
-            .setDesc('Files in this folder will be expose to blog project.')
+            .setName('source location')
+            .setDesc(
+                'Obsidian md files in this folder will be expose to your local project content.',
+            )
             .addText((text) =>
                 text
                     .setPlaceholder('Example: folder1/folder2')
@@ -113,6 +133,43 @@ export class SettingTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.publishToAbFolder)
                     .onChange(async (value) => {
                         this.plugin.settings.publishToAbFolder = value;
+                        await this.plugin.saveSettings();
+                    }),
+            );
+    }
+
+    _addPublishUrlPrefix(): void {
+        new Setting(this.containerEl)
+            .setName('publish domain url prefix')
+            .setDesc(
+                'The prefix to form a visitable publish url. result is `${prefix}${pubSlug}`.',
+            )
+            .addText((text) =>
+                text
+                    .setPlaceholder('Example: https://blog.com/post/')
+                    .setValue(this.plugin.settings.publishUrlPrefix)
+                    .onChange(async (value) => {
+                        this.plugin.settings.publishUrlPrefix = /\/$/.test(
+                            value,
+                        )
+                            ? value
+                            : value + '/';
+                        await this.plugin.saveSettings();
+                    }),
+            );
+    }
+
+    _addPublishSlugTemplate(): void {
+        new Setting(this.containerEl)
+            .setName('publish slug format')
+            .setDesc('The format is used to format pubSlug.')
+            .addText((text) =>
+                text
+                    .setPlaceholder('Example: {{buiSlug}}')
+                    .setValue(this.plugin.settings.publishSlugTemplate)
+                    .onChange(async (value) => {
+                        this.plugin.settings.publishSlugTemplate =
+                            value.replace(/pubSlug/g, 'buiSlug');
                         await this.plugin.saveSettings();
                     }),
             );
@@ -144,18 +201,18 @@ export class SettingTab extends PluginSettingTab {
         this.plugin.settings.metadataFormats.forEach(
             (metadataTemplate, index) => {
                 new Setting(this.containerEl)
-                    .addText((textEl) => {
-                        textEl
-                            .setPlaceholder('name')
+                    .addText((text) => {
+                        text.setPlaceholder('name')
+                            .then((text) => (text.inputEl.size = 30))
                             .setValue(metadataTemplate.name)
                             .onChange((name) => {
                                 metadataTemplate.name = name;
                                 this.plugin.saveSettings();
                             });
                     })
-                    .addText((textEl) => {
-                        textEl
-                            .setPlaceholder('template')
+                    .addText((text) => {
+                        text.setPlaceholder('template')
+                            .then((text) => (text.inputEl.size = 50))
                             .setValue(metadataTemplate.template)
                             .onChange((template) => {
                                 metadataTemplate.template = template;
@@ -202,6 +259,61 @@ export class SettingTab extends PluginSettingTab {
                     })
                     .infoEl.remove();
             },
+        );
+    }
+
+    _addWikilinkTemplateDescription(): void {
+        new Setting(this.containerEl)
+            .setName('wikilinks to markdownlinks')
+            .setDesc(
+                'The following templates is used to handle reference link (plugin will resolve file of wikilink).',
+            );
+    }
+
+    setSettingItemDescription(el: HTMLElement, text: string): void {
+        let desEl = el.querySelector('.setting-item-description');
+        if (desEl) {
+            desEl.textContent = text;
+        }
+    }
+
+    _addDisplayWikilinkFormats(): void {
+        this.setSettingItemDescription(
+            new Setting(this.containerEl).addText((text) => {
+                text.setPlaceholder('template')
+                    .then((text) => (text.inputEl.size = 65))
+                    .setValue(this.plugin.settings.wikilinkFormats.major)
+                    .onChange((template) => {
+                        this.plugin.settings.wikilinkFormats.major = template;
+                        this.plugin.saveSettings();
+                    });
+            }).infoEl,
+            'First Try',
+        );
+        this.setSettingItemDescription(
+            new Setting(this.containerEl).addText((text) => {
+                text.setPlaceholder('template')
+                    .then((text) => (text.inputEl.size = 65))
+                    .setValue(this.plugin.settings.wikilinkFormats.minor)
+                    .onChange((template) => {
+                        this.plugin.settings.wikilinkFormats.minor = template;
+                        this.plugin.saveSettings();
+                    });
+            }).infoEl,
+            'Second Try',
+        );
+        this.setSettingItemDescription(
+            new Setting(this.containerEl).addText((text) => {
+                text.setPlaceholder('template')
+                    .then((text) => (text.inputEl.size = 65))
+                    .setValue(this.plugin.settings.wikilinkFormats.notFound)
+                    .onChange((template) => {
+                        this.plugin.settings.wikilinkFormats.notFound =
+                            template;
+                        this.plugin.saveSettings();
+                    });
+            }).infoEl,
+            'Not Found',
         );
     }
 }

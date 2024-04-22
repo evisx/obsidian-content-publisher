@@ -1,6 +1,10 @@
 import { App, TFile, FrontMatterCache, Notice } from 'obsidian';
+import { relative } from 'path';
 import { Moment } from 'moment';
-import ContentPublisher from '../main';
+import { NOTE_META } from 'src/handlers';
+import { Settings } from 'src/settings';
+import { pinyinfy } from 'src/utils';
+import ContentPublisher from 'main';
 
 const arrayHandler = (arr: string[]) => `\n  - ${arr.join('\n  - ')}`;
 
@@ -30,27 +34,66 @@ class TemplateProcessor {
     }
 }
 
-export interface MetadataTemplateVariables {
+export type MetaVariables = {
+    file: TFile;
+    frontmatter?: FrontMatterCache;
+};
+
+export type MetadataTemplateVariables = {
     file: TFile;
     array: (arr: string[]) => string; // handle array to YAML list
-    frontmatter?: FrontMatterCache | null;
-    nowTime?: Moment;
+    nowTime: Moment;
+    frontmatter?: FrontMatterCache;
+    refer?: string;
+    buiSlug?: string;
+    pubSlug?: string;
+    pubUrl?: String;
     pubTime?: Moment;
     modTime?: Moment;
+};
+
+export class MetadataTemplateProcessorManager {
+    plugin: ContentPublisher;
+    file: TFile | null;
+    processor: MetadataTemplateProcessor | null;
+
+    constructor(plugin: ContentPublisher) {
+        this.plugin = plugin;
+        this.clear();
+    }
+
+    getProcessor(variables: MetaVariables): MetadataTemplateProcessor {
+        if (variables.file !== this.file) {
+            this.file = variables.file;
+            this.processor = new MetadataTemplateProcessor(
+                this.plugin,
+                variables,
+            );
+        } else if (!this.processor) {
+            this.processor = new MetadataTemplateProcessor(
+                this.plugin,
+                variables,
+            );
+        }
+        if (variables.frontmatter) {
+            this.processor.setFrontmatter(variables.frontmatter);
+        }
+        return this.processor;
+    }
+
+    clear(): void {
+        this.file = null;
+        this.processor = null;
+    }
 }
 
 export class MetadataTemplateProcessor extends TemplateProcessor {
     app: App;
+    settings: Settings;
     inited: Record<string, boolean>;
 
-    constructor(
-        plugin: ContentPublisher,
-        variables: {
-            file: TFile;
-            frontmatter?: FrontMatterCache;
-        },
-    ) {
-        const { app } = plugin;
+    constructor(plugin: ContentPublisher, variables: MetaVariables) {
+        const { app, settings } = plugin;
         const metadataVariables: MetadataTemplateVariables = {
             ...variables,
             // initial more here
@@ -59,6 +102,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         };
         super(metadataVariables);
         this.app = app;
+        this.settings = settings;
         this.inited = {};
     }
 
@@ -69,8 +113,69 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         });
     }
 
+    evalTemplateWithTryList(list: string[]): string {
+        for (let i = 0; i < list.length; i++) {
+            try {
+                return this.evalTemplate(list[i]);
+            } catch (err) {
+                if (i === list.length - 1) {
+                    // If it's the last item in the list
+                    new Notice(`All evals failed. Last error: ${err.message}`);
+                } else {
+                    new Notice(
+                        `Eval ${list[i]} failed: ${err.message}, trying next.`,
+                    );
+                }
+            }
+        }
+        throw new Error('All template evaluations failed.'); // Or return a default value
+    }
+
+    setFrontmatter(frontmatter: FrontMatterCache) {
+        this.setVariable('frontmatter', frontmatter);
+        this.inited['frontmatter'] = true;
+    }
+
+    setPubUrl(pubUrl: string) {
+        this.setVariable('pubUrl', pubUrl);
+        this.inited['pubUrl'] = true;
+    }
+
+    setPubTime(pubTime: Moment) {
+        this.setVariable('pubTime', pubTime);
+        this.inited['pubTime'] = true;
+    }
+
+    setModTime(modTime: Moment) {
+        this.setVariable('modTime', modTime);
+        this.inited['modTime'] = true;
+    }
+
+    setRefer(refer: string) {
+        this.setVariable('refer', refer);
+        this.inited['refer'] = true;
+    }
+
+    getRelatedPath(file: TFile): string {
+        return relative(this.settings.noteFolder, file.path);
+    }
+
+    generateBuiSlug(file: TFile): string {
+        console.log(this.getRelatedPath(file));
+        let slug = this.getRelatedPath(file)
+            .replace(/[\\/_]+/g, '-')
+            .replace(/\.md$/, '');
+        slug = pinyinfy(slug, '~').replace(
+            /[^A-Za-z0-9\-._~!$&'()*+,;=:@%]+/g, // only allow url supported symbol
+            '',
+        );
+        return slug;
+    }
+
     expressionHandler(expr: string) {
-        const matches = expr.match(/(frontmatter)|(pubTime)|(modTime)/g);
+        const matches = expr.match(
+            /(frontmatter)|(pubTime)|(modTime)|(refer)|(buiSlug)|(pubSlug)|(pubUrl)/g,
+        );
         // load date when needed
         if (matches) {
             matches.forEach((match) => {
@@ -84,6 +189,18 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
                         break;
                     case 'modTime':
                         this.initModTime();
+                        break;
+                    case 'refer':
+                        this.initRefer();
+                        break;
+                    case 'buiSlug':
+                        this.initBuiSlug();
+                        break;
+                    case 'pubSlug':
+                        this.initPubSlug();
+                        break;
+                    case 'pubUrl':
+                        this.initPubUrl();
                         break;
                 }
                 this.inited[match] = true;
@@ -100,7 +217,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         if (cache === undefined) {
             new Notice(`${file.basename} has no frontmatter`);
         }
-        this.setVariable('frontmatter', cache ? cache : null);
+        this.setVariable('frontmatter', cache);
     }
 
     initPubTime() {
@@ -108,7 +225,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
             return;
         }
         this.initFrontmatter(); // depend on frontmatter
-        const ts = this.variables.frontmatter['content-publish-ts'];
+        const ts = this.variables.frontmatter[NOTE_META.pubTs];
         this.setVariable(
             'pubTime',
             ts ? window.moment(ts) : this.variables.nowTime,
@@ -120,10 +237,53 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
             return;
         }
         this.initFrontmatter(); // depend on frontmatter
-        const ts = this.variables.frontmatter['content-update-ts'];
+        const ts = this.variables.frontmatter[NOTE_META.modTs];
         this.setVariable(
             'modTime',
             ts ? window.moment(ts) : this.variables.nowTime,
         );
+    }
+
+    initRefer() {
+        if (this.variables.refer !== undefined) {
+            return;
+        }
+        // use file basename as default
+        this.setVariable('refer', this.variables.file.basename);
+    }
+
+    initBuiSlug() {
+        if (this.variables.buiSlug !== undefined) {
+            return;
+        }
+        const buiSlug = this.generateBuiSlug(this.variables.file);
+        this.setVariable('buiSlug', buiSlug);
+    }
+
+    initPubSlug() {
+        if (this.variables.pubSlug !== undefined) {
+            return;
+        }
+        if (/pubSlug/.test(this.settings.publishSlugTemplate)) {
+            throw Error(
+                `Can't use pubSlug in pubSlug template, current is "${this.settings.publishSlugTemplate}" which cause dead cycle.`,
+            );
+        }
+        const pubSlug = this.evalTemplate(this.settings.publishSlugTemplate);
+        this.setVariable('pubSlug', pubSlug);
+    }
+
+    initPubUrl() {
+        if (this.variables.pubUrl !== undefined) {
+            return;
+        }
+        this.initFrontmatter(); // depend on frontmatter
+        const pubUrl = this.variables.frontmatter[NOTE_META.pubUrl];
+        if (pubUrl === undefined) {
+            const err = `${this.variables.file.basename} has no publish url!`;
+            new Notice(err);
+            throw Error(err);
+        }
+        this.setVariable('pubUrl', pubUrl);
     }
 }

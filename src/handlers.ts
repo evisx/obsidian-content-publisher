@@ -1,8 +1,8 @@
-import { TFile, Notice } from 'obsidian';
-import { Settings } from './settings';
-import { MetadataTemplateProcessor } from './template';
-import { relative } from 'path';
-import ContentPublisher from '../main';
+import { TFile, Notice, FrontMatterCache } from 'obsidian';
+import { Settings } from 'src/settings';
+import { MetaVariables, MetadataTemplateProcessorManager } from 'src/template';
+import { Moment } from 'moment';
+import ContentPublisher from 'main';
 
 class Handler {
     plugin: ContentPublisher;
@@ -15,8 +15,7 @@ class Handler {
 }
 
 export const NOTE_META = {
-    viewUrl: 'content-publish-url',
-    autoSlug: 'content-auto-slug',
+    pubUrl: 'content-publish-url',
     pubTs: 'content-publish-ts',
     modTs: 'content-update-ts',
 };
@@ -26,11 +25,48 @@ export class NoteHandler extends Handler {
         super(plugin);
     }
 
-    getRelatedPath(file: TFile): string {
-        return relative(this.settings.noteFolder, file.path);
+    generatePobUrl(file: TFile): string {
+        const process = this.plugin.getTemplateProcessor({ file: file });
+        return (
+            this.settings.publishUrlPrefix +
+            process.evalTemplate(this.settings.publishSlugTemplate)
+        );
     }
 
-    // getAutoSlug(file: TFile): string {}
+    updateNoteMeta(frontmatter: FrontMatterCache, file: TFile): void {
+        // TODO: respect option
+        let pubTime;
+        let modTime;
+        if (!frontmatter[NOTE_META.pubUrl]) {
+            frontmatter[NOTE_META.pubUrl] = this.generatePobUrl(file);
+        }
+        if (!frontmatter[NOTE_META.pubTs]) {
+            pubTime = window.moment();
+            frontmatter[NOTE_META.pubTs] = pubTime.valueOf();
+        }
+        modTime = window.moment(file.stat.mtime);
+        frontmatter[NOTE_META.modTs] = file.stat.mtime;
+
+        const process = this.plugin.getTemplateProcessor({ file: file });
+        process.setModTime(modTime);
+
+        if (pubTime !== undefined) {
+            process.setPubTime(pubTime);
+        }
+    }
+
+    async updateFrontmatter(file: TFile): Promise<FrontMatterCache> {
+        return new Promise<FrontMatterCache>((resolve, _reject) => {
+            this.plugin.app.fileManager.processFrontMatter(
+                file,
+                (frontmatter: FrontMatterCache) => {
+                    this.updateNoteMeta(frontmatter, file);
+                    resolve(frontmatter);
+                },
+                file.stat, // keep mtime not change
+            );
+        });
+    }
 }
 
 export class ContentHandler extends Handler {
@@ -38,10 +74,8 @@ export class ContentHandler extends Handler {
         super(plugin);
     }
 
-    getPublishedYAML(file: TFile): string {
-        const process = new MetadataTemplateProcessor(this.plugin, {
-            file: file,
-        });
+    getPublishedYAML(variables: MetaVariables): string {
+        const process = this.plugin.getTemplateProcessor(variables);
         const metadatas: string[] = [];
         this.settings.metadataFormats.forEach((meta) => {
             try {
@@ -58,8 +92,34 @@ export class ContentHandler extends Handler {
         return `---\n${metadatas.join('\n')}\n---\n`;
     }
 
+    // TODO: handle local image file link
     async getPublishedText(file: TFile): Promise<string> {
-        return this.getContentWithoutFrontMatter(file);
+        const tplProcManager = new MetadataTemplateProcessorManager(
+            this.plugin,
+        );
+        const cache = this.plugin.app.metadataCache;
+        const { major, minor, notFound } = this.settings.wikilinkFormats;
+        return (await this.getContentWithoutFrontMatter(file)).replace(
+            /\[\[(.*?)\]\]/g,
+            (_match, refer) => {
+                let tplProc;
+                const linkFile = cache.getFirstLinkpathDest(refer, file.path);
+                if (!linkFile) {
+                    new Notice(`Note of [[${refer}]] not found!`);
+                    tplProc = tplProcManager.getProcessor({ file: file });
+                    tplProc.setRefer(refer);
+                    return tplProc.evalTemplate(notFound);
+                }
+
+                tplProc = tplProcManager.getProcessor({ file: linkFile });
+                tplProc.setRefer(refer);
+                return tplProc.evalTemplateWithTryList([
+                    major,
+                    minor,
+                    notFound,
+                ]);
+            },
+        );
     }
 
     async getContentWithoutFrontMatter(file: TFile): Promise<string> {
