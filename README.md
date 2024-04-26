@@ -1,4 +1,5 @@
 # Content Publisher
+
 This is a obsidian plugin for export markdown to other markdown.
 
 Currently can handle below during exporting.
@@ -7,6 +8,7 @@ Currently can handle below during exporting.
 2. Wikilinks handling, convert to other format base on setting. (mostly Markdonwlinks)
 
 # Usage
+
 Suppose that I have a blog base on [Astro](https://astro.build/), so I got local project like `/User/me/projects/astro-paper`. Markdown content in Obsidian has a little bit different in blog project. Therefore, I got this plugin to handle it, in order to keep my original notes in obsidian with obsidian way, and publish it to blog project with it's own way. (normally restrain by Markdown and project content schema)
 
 # How to install
@@ -37,9 +39,11 @@ To install manually, you'll need to:
 ## Screenshot
 
 ### Demo
+
 ![demo](./img/demo.png)
 
 ### Demo Setting
+
 ![setting](./img/demo-setting.png)
 
 ## How to use
@@ -49,12 +53,13 @@ After well setting.
 1. In your source markdown file, call `Content Publisher: Publish current note` from obsidian command palette to publish content.
 
 ## Todos
-- [x] template script support (limit variables)
-- [x] handle metadata (YAML format, obsidian frontmatter)
-- [x] handle wikilinks
-- [ ] handle image
-- [x] publish single note
-- [ ] publish all notes
+
+-   [x] template script support (limit variables)
+-   [x] handle metadata (YAML format, obsidian frontmatter)
+-   [x] handle wikilinks
+-   [ ] handle image
+-   [x] publish single note
+-   [ ] publish all notes
 
 ## How to develop
 

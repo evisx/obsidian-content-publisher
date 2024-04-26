@@ -54,8 +54,7 @@ export type MetadataTemplateVariables = {
 
 export class MetadataTemplateProcessorManager {
     plugin: ContentPublisher;
-    file: TFile | null;
-    processor: MetadataTemplateProcessor | null;
+    prcessorCache: Record<string, MetadataTemplateProcessor>;
 
     constructor(plugin: ContentPublisher) {
         this.plugin = plugin;
@@ -63,27 +62,20 @@ export class MetadataTemplateProcessorManager {
     }
 
     getProcessor(variables: MetaVariables): MetadataTemplateProcessor {
-        if (variables.file !== this.file) {
-            this.file = variables.file;
-            this.processor = new MetadataTemplateProcessor(
-                this.plugin,
-                variables,
-            );
-        } else if (!this.processor) {
-            this.processor = new MetadataTemplateProcessor(
-                this.plugin,
-                variables,
-            );
+        const file = variables.file;
+        let processor = this.prcessorCache[file.path];
+        if (processor === undefined) {
+            processor = new MetadataTemplateProcessor(this.plugin, variables);
+            this.prcessorCache[file.path] = processor;
         }
         if (variables.frontmatter) {
-            this.processor.setFrontmatter(variables.frontmatter);
+            processor.setFrontmatter(variables.frontmatter);
         }
-        return this.processor;
+        return processor;
     }
 
     clear(): void {
-        this.file = null;
-        this.processor = null;
+        this.prcessorCache = {};
     }
 }
 
@@ -161,15 +153,17 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
     }
 
     generateBuiSlug(file: TFile): string {
-        console.log(this.getRelatedPath(file));
-        let slug = this.getRelatedPath(file)
+        const slug = this.getRelatedPath(file)
             .replace(/[\\/_]+/g, '-')
             .replace(/\.md$/, '');
-        slug = pinyinfy(slug, '~').replace(
-            /[^A-Za-z0-9\-._~!$&'()*+,;=:@%]+/g, // only allow url supported symbol
-            '',
+        return (
+            pinyinfy(slug, '-')
+                .replace(/[\s]+/g, '-')
+                // only allow url supported symbol
+                .replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@%]+/g, '')
+                // handle duplicated symbol
+                .replace(/[\s\-._~!$&'()*+,;=:@]+/g, '-')
         );
-        return slug;
     }
 
     expressionHandler(expr: string) {

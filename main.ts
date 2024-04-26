@@ -15,15 +15,13 @@ import {
 } from 'src/utils';
 
 export default class ContentPublisher extends Plugin {
-    public pinyin: any;
+    public tplProccessorManager: MetadataTemplateProcessorManager;
     settings: Settings;
     noteHandler: NoteHandler;
     contentHandler: ContentHandler;
-    tplProccessorManager: MetadataTemplateProcessorManager;
 
     async onload() {
         await this.loadSettings();
-        this.pinyin = pinyinfy;
 
         this._addCommandValidateAbPath();
         this._addCommandPublishCurrentNote();
@@ -80,6 +78,29 @@ export default class ContentPublisher extends Plugin {
             callback,
         );
     }
+
+    // async publishNote(file: TFile, callback?: () => void): Promise<void> {
+    //     if (callback === undefined) {
+    //         callback = () => {
+    //             new Notice(
+    //                 `publish ${file.basename} to ${this.settings.publishToAbFolder}`,
+    //             );
+    //         };
+    //     }
+    //     // TODO: if respect update-ts
+    //     const frontmatter = await this.noteHandler.updateFrontmatter(file);
+    //     const yaml = this.contentHandler.getPublishedYAML({
+    //         file: file,
+    //         frontmatter: frontmatter,
+    //     });
+    //     const content = await this.contentHandler.getPublishedText(file);
+
+    //     writeContentToAbPath(
+    //         resolvePublishPath(this, file),
+    //         yaml + '\n' + content,
+    //         callback,
+    //     );
+    // }
 
     _checkProjectContentAbPathSetting(validNoticed = false): boolean {
         if (

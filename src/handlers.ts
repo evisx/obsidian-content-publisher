@@ -94,9 +94,7 @@ export class ContentHandler extends Handler {
 
     // TODO: handle local image file link
     async getPublishedText(file: TFile): Promise<string> {
-        const tplProcManager = new MetadataTemplateProcessorManager(
-            this.plugin,
-        );
+        const tplProcManager = this.plugin.tplProccessorManager;
         const cache = this.plugin.app.metadataCache;
         const { major, minor, notFound } = this.settings.wikilinkFormats;
         return (await this.getContentWithoutFrontMatter(file)).replace(
