@@ -1,7 +1,7 @@
 {
     "id": "content-publisher",
     "name": "Content Publisher",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "minAppVersion": "0.15.0",
     "description": "Demonstrates some of the capabilities of the Obsidian API.",
     "author": "evisx",

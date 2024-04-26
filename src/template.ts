@@ -167,6 +167,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
                 .replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@%]+/g, '')
                 // handle duplicated symbol
                 .replace(/[\s\-._~!$&'()*+,;=:@]+/g, '-')
+                .toLowerCase()
         );
     }
 
