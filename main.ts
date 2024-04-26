@@ -1,5 +1,5 @@
 // import { Editor, MarkdownView, TFile, Notice, Plugin } from 'obsidian';
-import { TFile, Notice, Plugin } from 'obsidian';
+import { TAbstractFile, TFolder, TFile, Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, Settings, SettingTab } from 'src/settings';
 import {
     MetaVariables,
@@ -16,6 +16,7 @@ import {
 
 export default class ContentPublisher extends Plugin {
     public tplProccessorManager: MetadataTemplateProcessorManager;
+    waitTplProccessor: number;
     settings: Settings;
     noteHandler: NoteHandler;
     contentHandler: ContentHandler;
@@ -25,10 +26,12 @@ export default class ContentPublisher extends Plugin {
 
         this._addCommandValidateAbPath();
         this._addCommandPublishCurrentNote();
+        this._addCommandPublishAllNotes();
 
         this.addSettingTab(new SettingTab(this));
         this.noteHandler = new NoteHandler(this);
         this.contentHandler = new ContentHandler(this);
+        this.waitTplProccessor = 0;
         this.tplProccessorManager = new MetadataTemplateProcessorManager(this);
     }
 
@@ -52,11 +55,50 @@ export default class ContentPublisher extends Plugin {
         return this.tplProccessorManager.getProcessor(variables);
     }
 
+    checkClearTemplateProcessor() {
+        this.waitTplProccessor--;
+        if (this.waitTplProccessor <= 0) this.clearTemplateProcessor();
+    }
+
     clearTemplateProcessor() {
         this.tplProccessorManager.clear();
     }
 
     async publishSingleNote(file: TFile, callback?: () => void): Promise<void> {
+        const frontmatter = await this.noteHandler.updateFrontmatter(file);
+        this.waitTplProccessor = 1;
+        this.justPublishContent(
+            {
+                file: file,
+                frontmatter: frontmatter,
+            },
+            callback,
+        );
+    }
+
+    async refreshContentFrontmatter(files: TFile[]): Promise<void> {
+        for (const file of files) {
+            try {
+                const frontmatter =
+                    await this.noteHandler.updateFrontmatter(file);
+                // caching
+                this.getTemplateProcessor({
+                    file: file,
+                    frontmatter: frontmatter,
+                });
+            } catch (err) {
+                new Notice(
+                    `refreshing ${file.basename} frontmatter failed, skip it.`,
+                );
+            }
+        }
+    }
+
+    async justPublishContent(
+        variables: MetaVariables,
+        callback?: () => void,
+    ): Promise<void> {
+        const file = variables.file;
         if (callback === undefined) {
             callback = () => {
                 new Notice(
@@ -64,43 +106,15 @@ export default class ContentPublisher extends Plugin {
                 );
             };
         }
-        // TODO: if respect update-ts
-        const frontmatter = await this.noteHandler.updateFrontmatter(file);
-        const yaml = this.contentHandler.getPublishedYAML({
-            file: file,
-            frontmatter: frontmatter,
-        });
+        const yaml = this.contentHandler.getPublishedYAML(variables);
         const content = await this.contentHandler.getPublishedText(file);
-
         writeContentToAbPath(
             resolvePublishPath(this, file),
             yaml + '\n' + content,
             callback,
         );
+        this.checkClearTemplateProcessor();
     }
-
-    // async publishNote(file: TFile, callback?: () => void): Promise<void> {
-    //     if (callback === undefined) {
-    //         callback = () => {
-    //             new Notice(
-    //                 `publish ${file.basename} to ${this.settings.publishToAbFolder}`,
-    //             );
-    //         };
-    //     }
-    //     // TODO: if respect update-ts
-    //     const frontmatter = await this.noteHandler.updateFrontmatter(file);
-    //     const yaml = this.contentHandler.getPublishedYAML({
-    //         file: file,
-    //         frontmatter: frontmatter,
-    //     });
-    //     const content = await this.contentHandler.getPublishedText(file);
-
-    //     writeContentToAbPath(
-    //         resolvePublishPath(this, file),
-    //         yaml + '\n' + content,
-    //         callback,
-    //     );
-    // }
 
     _checkProjectContentAbPathSetting(validNoticed = false): boolean {
         if (
@@ -144,7 +158,7 @@ export default class ContentPublisher extends Plugin {
 
     _addCommandPublishCurrentNote(): void {
         this.addCommand({
-            id: 'Publish-current-note',
+            id: 'publish-current-note',
             name: 'Publish current note',
             callback: () => {
                 if (!this._checkProjectContentAbPathSetting()) {
@@ -159,7 +173,39 @@ export default class ContentPublisher extends Plugin {
                         `Your note has been published! At ${this.settings.publishToAbFolder}`,
                     );
                 });
-                this.clearTemplateProcessor();
+            },
+        });
+    }
+
+    _addCommandPublishAllNotes(): void {
+        this.addCommand({
+            id: 'publish-all-notes',
+            name: 'Publish all notes',
+            callback: async () => {
+                if (!this._checkProjectContentAbPathSetting()) {
+                    return;
+                }
+
+                const folder = this.app.vault.getAbstractFileByPath(
+                    this.settings.noteFolder,
+                );
+                const queue: (TAbstractFile | null)[] = [folder];
+                const files = [];
+
+                while (queue.length) {
+                    const t = queue.shift();
+                    if (t instanceof TFolder) {
+                        queue.push(...t.children);
+                    } else if (t instanceof TFile) {
+                        // TODO: respect modTs
+                        files.push(t);
+                    }
+                }
+                await this.refreshContentFrontmatter(files);
+                this.waitTplProccessor = files.length;
+                for (const file of files) {
+                    this.justPublishContent({ file: file });
+                }
             },
         });
     }
