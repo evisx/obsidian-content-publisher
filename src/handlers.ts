@@ -85,7 +85,7 @@ export class ContentHandler extends Handler {
                         .trim(),
                 );
             } catch (error) {
-                new Notice(`Publish Error: ${error.message}`);
+                new Notice(`Publish Error: ${error.message}`, 2000);
                 throw Error(error.message);
             }
         });
@@ -103,7 +103,7 @@ export class ContentHandler extends Handler {
                 let tplProc;
                 const linkFile = cache.getFirstLinkpathDest(refer, file.path);
                 if (!linkFile) {
-                    new Notice(`Note of [[${refer}]] not found!`);
+                    new Notice(`Note of [[${refer}]] not found!`, 2000);
                     tplProc = tplProcManager.getProcessor({ file: file });
                     tplProc.setRefer(refer);
                     return tplProc.evalTemplate(notFound);

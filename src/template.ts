@@ -112,10 +112,14 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
             } catch (err) {
                 if (i === list.length - 1) {
                     // If it's the last item in the list
-                    new Notice(`All evals failed. Last error: ${err.message}`);
+                    new Notice(
+                        `All evals failed. Last error: ${err.message}`,
+                        2000,
+                    );
                 } else {
                     new Notice(
                         `Eval ${list[i]} failed: ${err.message}, trying next.`,
+                        2000,
                     );
                 }
             }
@@ -209,7 +213,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         const file = this.variables.file;
         const cache = this.app.metadataCache.getFileCache(file)?.frontmatter;
         if (cache === undefined) {
-            new Notice(`${file.basename} has no frontmatter`);
+            new Notice(`${file.basename} has no frontmatter`, 2000);
         }
         this.setVariable('frontmatter', cache);
     }
@@ -275,7 +279,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         const pubUrl = this.variables.frontmatter[NOTE_META.pubUrl];
         if (pubUrl === undefined) {
             const err = `${this.variables.file.basename} has no publish url!`;
-            new Notice(err);
+            new Notice(err, 2000);
             throw Error(err);
         }
         this.setVariable('pubUrl', pubUrl);

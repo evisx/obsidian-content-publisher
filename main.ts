@@ -16,7 +16,8 @@ import {
 
 export default class ContentPublisher extends Plugin {
     public tplProccessorManager: MetadataTemplateProcessorManager;
-    waitTplProccessor: number;
+    waitProcessingTask: number;
+    result: { successed: number; failed: number };
     settings: Settings;
     noteHandler: NoteHandler;
     contentHandler: ContentHandler;
@@ -31,7 +32,6 @@ export default class ContentPublisher extends Plugin {
         this.addSettingTab(new SettingTab(this));
         this.noteHandler = new NoteHandler(this);
         this.contentHandler = new ContentHandler(this);
-        this.waitTplProccessor = 0;
         this.tplProccessorManager = new MetadataTemplateProcessorManager(this);
     }
 
@@ -55,18 +55,43 @@ export default class ContentPublisher extends Plugin {
         return this.tplProccessorManager.getProcessor(variables);
     }
 
-    checkClearTemplateProcessor() {
-        this.waitTplProccessor--;
-        if (this.waitTplProccessor <= 0) this.clearTemplateProcessor();
+    checkTaskDone() {
+        this.waitProcessingTask--;
+        if (this.waitProcessingTask <= 0) {
+            this.clearTemplateProcessor();
+            this.noticeResult();
+            this.clearTask();
+        }
     }
 
     clearTemplateProcessor() {
         this.tplProccessorManager.clear();
     }
 
+    setTask(task: number) {
+        this.waitProcessingTask = task;
+        this.result = { successed: 0, failed: 0 };
+    }
+
+    clearTask() {
+        this.waitProcessingTask = 0;
+        this.result = { successed: 0, failed: 0 };
+    }
+
+    noticeResult() {
+        if (this.result.failed > 0) {
+            new Notice(
+                `All done, failed: ${this.result.failed}, successed: ${this.result.successed}`,
+                5000,
+            );
+        } else {
+            new Notice('All notes have been published!', 5000);
+        }
+    }
+
     async publishSingleNote(file: TFile, callback?: () => void): Promise<void> {
         const frontmatter = await this.noteHandler.updateFrontmatter(file);
-        this.waitTplProccessor = 1;
+        this.setTask(1);
         this.justPublishContent(
             {
                 file: file,
@@ -89,6 +114,7 @@ export default class ContentPublisher extends Plugin {
             } catch (err) {
                 new Notice(
                     `refreshing ${file.basename} frontmatter failed, skip it.`,
+                    2000,
                 );
             }
         }
@@ -103,17 +129,24 @@ export default class ContentPublisher extends Plugin {
             callback = () => {
                 new Notice(
                     `publish ${file.basename} to ${this.settings.publishToAbFolder}`,
+                    2000,
                 );
             };
         }
-        const yaml = this.contentHandler.getPublishedYAML(variables);
-        const content = await this.contentHandler.getPublishedText(file);
-        writeContentToAbPath(
-            resolvePublishPath(this, file),
-            yaml + '\n' + content,
-            callback,
-        );
-        this.checkClearTemplateProcessor();
+        try {
+            const yaml = this.contentHandler.getPublishedYAML(variables);
+            const content = await this.contentHandler.getPublishedText(file);
+            writeContentToAbPath(
+                resolvePublishPath(this, file),
+                yaml + '\n' + content,
+                callback,
+            );
+            this.result.successed++;
+        } catch (err) {
+            this.result.failed++;
+            console.error(`publish ${file.basename} failded:`, err.message);
+        }
+        this.checkTaskDone();
     }
 
     _checkProjectContentAbPathSetting(validNoticed = false): boolean {
@@ -125,10 +158,16 @@ export default class ContentPublisher extends Plugin {
             )
         ) {
             if (validNoticed) {
-                new Notice(`Valid path: ${this.settings.publishToAbFolder}`);
+                new Notice(
+                    `Valid path: ${this.settings.publishToAbFolder}`,
+                    2000,
+                );
             }
         } else {
-            new Notice(`Invalid path: ${this.settings.publishToAbFolder}`);
+            new Notice(
+                `Invalid path: ${this.settings.publishToAbFolder}`,
+                2000,
+            );
             return false;
         }
         return true;
@@ -144,6 +183,7 @@ export default class ContentPublisher extends Plugin {
         }
         new Notice(
             `Not in Source Folder: ${this.settings.noteFolder} Or Not a Markdown File`,
+            2000,
         );
         return false;
     }
@@ -171,6 +211,7 @@ export default class ContentPublisher extends Plugin {
                 this.publishSingleNote(file, () => {
                     new Notice(
                         `Your note has been published! At ${this.settings.publishToAbFolder}`,
+                        2000,
                     );
                 });
             },
@@ -186,6 +227,7 @@ export default class ContentPublisher extends Plugin {
                     return;
                 }
 
+                new Notice('Preparing to publish all...', 2000);
                 const folder = this.app.vault.getAbstractFileByPath(
                     this.settings.noteFolder,
                 );
@@ -202,7 +244,11 @@ export default class ContentPublisher extends Plugin {
                     }
                 }
                 await this.refreshContentFrontmatter(files);
-                this.waitTplProccessor = files.length;
+                this.setTask(files.length);
+                new Notice(
+                    `Got ${this.waitProcessingTask} nots for publishing...`,
+                    5000,
+                );
                 for (const file of files) {
                     this.justPublishContent({ file: file });
                 }

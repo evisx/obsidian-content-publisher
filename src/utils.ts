@@ -40,7 +40,7 @@ export function writeContentToAbPath(
             successCallback();
         }
     } catch (err) {
-        new Notice(err.message);
+        new Notice(err.message, 2000);
     }
 }
 
