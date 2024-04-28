@@ -59,7 +59,8 @@ After well setting.
 -   [x] handle wikilinks
 -   [ ] handle image
 -   [x] publish single note
--   [ ] publish all notes
+-   [x] publish all notes
+-   [ ] publish all notes (respect modTime)
 
 ## How to develop
 
