@@ -3,6 +3,7 @@ import { arraymove } from './utils';
 import ContentPublisher from '../main';
 
 export interface MetadataTemplate {
+    rule: string;
     name: string;
     template: string;
 }
@@ -27,38 +28,47 @@ export const DEFAULT_SETTINGS: Settings = {
     publishSlugTemplate: '{{buiSlug}}',
     metadataFormats: [
         {
+            rule: 'always',
             name: 'title',
             template: '{{file.basename}}',
         },
         {
+            rule: 'always',
             name: 'author',
             template: '{{frontmatter.author}}',
         },
         {
+            rule: 'always',
             name: 'pubDatetime',
             template: '{{pubTime.format()}}',
         },
         {
+            rule: 'always',
             name: 'modDatetime',
             template: '{{modTime.format()}}',
         },
         {
+            rule: 'always',
             name: 'featured',
             template: 'false',
         },
         {
+            rule: 'always',
             name: 'slug',
             template: '{{pubSlug}}',
         },
         {
+            rule: 'always',
             name: 'draft',
             template: '{{frontmatter.draft}}',
         },
         {
+            rule: 'always',
             name: 'tags',
             template: '{{array(frontmatter.tags)}}',
         },
         {
+            rule: 'always',
             name: 'description',
             template: '{{frontmatter.description}}',
         },
@@ -130,6 +140,7 @@ export class SettingTab extends PluginSettingTab {
                     .setPlaceholder(
                         'Example: /Users/home/projects/astro/src/blog',
                     )
+                    .then((text) => (text.inputEl.size = 30))
                     .setValue(this.plugin.settings.publishToAbFolder)
                     .onChange(async (value) => {
                         this.plugin.settings.publishToAbFolder = value;
@@ -142,11 +153,12 @@ export class SettingTab extends PluginSettingTab {
         new Setting(this.containerEl)
             .setName('publish domain url prefix')
             .setDesc(
-                'The prefix to form a visitable publish url. result is `${prefix}${pubSlug}`.',
+                'The urlPrefix to form a visible publish url. Result url is `${urlPrefix}${pubSlug}`.',
             )
             .addText((text) =>
                 text
                     .setPlaceholder('Example: https://blog.com/post/')
+                    .then((text) => (text.inputEl.size = 30))
                     .setValue(this.plugin.settings.publishUrlPrefix)
                     .onChange(async (value) => {
                         this.plugin.settings.publishUrlPrefix = /\/$/.test(
@@ -166,6 +178,7 @@ export class SettingTab extends PluginSettingTab {
             .addText((text) =>
                 text
                     .setPlaceholder('Example: {{buiSlug}}')
+                    .then((text) => (text.inputEl.size = 65))
                     .setValue(this.plugin.settings.publishSlugTemplate)
                     .onChange(async (value) => {
                         this.plugin.settings.publishSlugTemplate =
@@ -188,6 +201,7 @@ export class SettingTab extends PluginSettingTab {
                     .setCta()
                     .onClick(() => {
                         this.plugin.settings.metadataFormats.push({
+                            rule: 'always',
                             name: '',
                             template: '',
                         });
@@ -201,9 +215,20 @@ export class SettingTab extends PluginSettingTab {
         this.plugin.settings.metadataFormats.forEach(
             (metadataTemplate, index) => {
                 new Setting(this.containerEl)
+                    .addDropdown((dropdown) => {
+                        dropdown
+                            .addOption('always', 'always')
+                            .addOption('present', 'present')
+                            .addOption('none', 'none')
+                            .setValue(metadataTemplate.rule)
+                            .onChange(async (value) => {
+                                metadataTemplate.rule = value;
+                                this.plugin.saveSettings();
+                            });
+                    })
                     .addText((text) => {
                         text.setPlaceholder('name')
-                            .then((text) => (text.inputEl.size = 30))
+                            .then((text) => (text.inputEl.size = 20))
                             .setValue(metadataTemplate.name)
                             .onChange((name) => {
                                 metadataTemplate.name = name;

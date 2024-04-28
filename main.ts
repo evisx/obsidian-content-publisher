@@ -11,16 +11,18 @@ import {
     checkSettingOfAbPath,
     resolvePublishPath,
     writeContentToAbPath,
+    containsChinese,
     pinyinfy,
 } from 'src/utils';
 
 export default class ContentPublisher extends Plugin {
-    public tplProccessorManager: MetadataTemplateProcessorManager;
+    tplProccessorManager: MetadataTemplateProcessorManager;
     waitProcessingTask: number;
     result: { successed: number; failed: number };
     settings: Settings;
     noteHandler: NoteHandler;
     contentHandler: ContentHandler;
+    translate: (zh: string) => string;
 
     async onload() {
         await this.loadSettings();
@@ -33,6 +35,24 @@ export default class ContentPublisher extends Plugin {
         this.noteHandler = new NoteHandler(this);
         this.contentHandler = new ContentHandler(this);
         this.tplProccessorManager = new MetadataTemplateProcessorManager(this);
+
+        this.translate = pinyinfy;
+        // this.translate = async (zh: string): Promise<string> => {
+        //     if (!containsChinese(zh)) {
+        //         return zh;
+        //     }
+        //     const installedPlugins = Reflect.get(this.app, 'plugins').plugins;
+        //     if (installedPlugins.translate !== undefined) {
+        //         const res = await installedPlugins.translate.api.translate();
+        //         if (res.status_code != 200) {
+        //             throw Error(res);
+        //         }
+        //         // TODO: result
+        //         return zh;
+        //     } else {
+        //         return pinyinfy(zh);
+        //     }
+        // };
     }
 
     onunload() {

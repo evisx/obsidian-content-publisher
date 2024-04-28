@@ -64,8 +64,24 @@ export function removeEmoji(str: string): string {
     );
 }
 
+export function containsChinese(text: string): boolean {
+    return /[\u3400-\u4DBF\u4E00-\u9FFF\u20000-\u2A6DF]/.test(text);
+}
+
 export function pinyinfy(str: string, sp: string = '-'): string {
     return pinyin(str, { style: 'normal' })
         .map((arr: string[]) => arr[0])
         .join(sp);
+}
+
+export function simplify(str: string): string {
+    return (
+        str
+            .replace(/[\s\/\\]+/g, '-')
+            // only allow url supported symbol
+            .replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@%]+/g, '')
+            // handle duplicated symbol
+            .replace(/[\s\-._~!$&'()*+,;=:@]+/g, '-')
+            .toLowerCase()
+    );
 }

@@ -3,7 +3,7 @@ import { relative } from 'path';
 import { Moment } from 'moment';
 import { NOTE_META } from 'src/handlers';
 import { Settings } from 'src/settings';
-import { pinyinfy } from 'src/utils';
+import { pinyinfy, simplify } from 'src/utils';
 import ContentPublisher from 'main';
 
 const arrayHandler = (arr: string[]) => `\n  - ${arr.join('\n  - ')}`;
@@ -42,9 +42,12 @@ export type MetaVariables = {
 export type MetadataTemplateVariables = {
     file: TFile;
     array: (arr: string[]) => string; // handle array to YAML list
+    simplify: (str: string) => string;
+    relative: (file: TFile) => string;
     nowTime: Moment;
     frontmatter?: FrontMatterCache;
     refer?: string;
+    urlPrefix?: string;
     buiSlug?: string;
     pubSlug?: string;
     pubUrl?: String;
@@ -82,19 +85,23 @@ export class MetadataTemplateProcessorManager {
 export class MetadataTemplateProcessor extends TemplateProcessor {
     app: App;
     settings: Settings;
+    translate: (zh: string) => string;
     inited: Record<string, boolean>;
 
     constructor(plugin: ContentPublisher, variables: MetaVariables) {
-        const { app, settings } = plugin;
+        const { app, settings, translate } = plugin;
         const metadataVariables: MetadataTemplateVariables = {
             ...variables,
             // initial more here
             array: arrayHandler,
             nowTime: window.moment(),
+            simplify: simplify,
+            relative: (f: TFile) => relative(settings.noteFolder, f.path),
         };
         super(metadataVariables);
         this.app = app;
         this.settings = settings;
+        this.translate = translate;
         this.inited = {};
     }
 
@@ -157,23 +164,15 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
     }
 
     generateBuiSlug(file: TFile): string {
-        const slug = this.getRelatedPath(file)
-            .replace(/[\\/_]+/g, '-')
-            .replace(/\.md$/, '');
-        return (
-            pinyinfy(slug, '-')
-                .replace(/[\s]+/g, '-')
-                // only allow url supported symbol
-                .replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@%]+/g, '')
-                // handle duplicated symbol
-                .replace(/[\s\-._~!$&'()*+,;=:@]+/g, '-')
-                .toLowerCase()
-        );
+        const segs = this.getRelatedPath(file).replace(/\.md$/, '').split('/');
+        const slug = segs.map((text) => this.translate(text)).join('-');
+
+        return simplify(slug);
     }
 
     expressionHandler(expr: string) {
         const matches = expr.match(
-            /(frontmatter)|(pubTime)|(modTime)|(refer)|(buiSlug)|(pubSlug)|(pubUrl)/g,
+            /(frontmatter)|(pubTime)|(modTime)|(refer)|(urlPrefix)|(buiSlug)|(pubSlug)|(pubUrl)/g,
         );
         // load date when needed
         if (matches) {
@@ -191,6 +190,9 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
                         break;
                     case 'refer':
                         this.initRefer();
+                        break;
+                    case 'urlPrefix':
+                        this.initUrlPrefix();
                         break;
                     case 'buiSlug':
                         this.initBuiSlug();
@@ -249,6 +251,13 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
         }
         // use file basename as default
         this.setVariable('refer', this.variables.file.basename);
+    }
+
+    initUrlPrefix() {
+        if (this.variables.urlPrefix !== undefined) {
+            return;
+        }
+        this.setVariable('urlPrefix', this.settings.publishUrlPrefix);
     }
 
     initBuiSlug() {

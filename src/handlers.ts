@@ -78,11 +78,12 @@ export class ContentHandler extends Handler {
         const process = this.plugin.getTemplateProcessor(variables);
         const metadatas: string[] = [];
         this.settings.metadataFormats.forEach((meta) => {
+            if (meta.rule === 'none') return;
             try {
+                const data = process.evalTemplate(meta.template);
+                if (meta.rule === 'present' && !data) return;
                 metadatas.push(
-                    `${meta.name}: ${process.evalTemplate(meta.template)}`
-                        .replace(/\s+\n/g, '\n')
-                        .trim(),
+                    `${meta.name}: ${data}`.replace(/\s+\n/g, '\n').trim(),
                 );
             } catch (error) {
                 new Notice(`Publish Error: ${error.message}`, 2000);
