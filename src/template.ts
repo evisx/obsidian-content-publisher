@@ -3,7 +3,7 @@ import { relative } from 'path';
 import { Moment } from 'moment';
 import { NOTE_META } from 'src/handlers';
 import { Settings } from 'src/settings';
-import { pinyinfy, simplify } from 'src/utils';
+import { pinyinfy, simplify, removeEmoji } from 'src/utils';
 import ContentPublisher from 'main';
 
 const arrayHandler = (arr: string[]) => `\n  - ${arr.join('\n  - ')}`;
@@ -43,6 +43,7 @@ export type MetadataTemplateVariables = {
     file: TFile;
     array: (arr: string[]) => string; // handle array to YAML list
     simplify: (str: string) => string;
+    emojiless: (file: string) => string;
     relative: (file: TFile) => string;
     nowTime: Moment;
     frontmatter?: FrontMatterCache;
@@ -96,6 +97,7 @@ export class MetadataTemplateProcessor extends TemplateProcessor {
             array: arrayHandler,
             nowTime: window.moment(),
             simplify: simplify,
+            emojiless: removeEmoji,
             relative: (f: TFile) => relative(settings.noteFolder, f.path),
         };
         super(metadataVariables);

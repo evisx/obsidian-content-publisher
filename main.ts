@@ -6,7 +6,7 @@ import {
     MetadataTemplateProcessorManager,
     MetadataTemplateProcessor,
 } from 'src/template';
-import { NoteHandler, ContentHandler } from 'src/handlers';
+import { NOTE_META, NoteHandler, ContentHandler } from 'src/handlers';
 import {
     checkSettingOfAbPath,
     resolvePublishPath,
@@ -30,6 +30,7 @@ export default class ContentPublisher extends Plugin {
         this._addCommandValidateAbPath();
         this._addCommandPublishCurrentNote();
         this._addCommandPublishAllNotes();
+        this._addCommandPublishAllNotesForce();
 
         this.addSettingTab(new SettingTab(this));
         this.noteHandler = new NoteHandler(this);
@@ -169,6 +170,52 @@ export default class ContentPublisher extends Plugin {
         this.checkTaskDone();
     }
 
+    async publishAllNotes(respectModTs: boolean = true): Promise<void> {
+        if (!this._checkProjectContentAbPathSetting()) {
+            return;
+        }
+
+        new Notice('Preparing to publish all...', 2000);
+        const folder = this.app.vault.getAbstractFileByPath(
+            this.settings.noteFolder,
+        );
+        const queue: (TAbstractFile | null)[] = [folder];
+        const files = [];
+        const cache = this.app.metadataCache;
+
+        while (queue.length) {
+            const t = queue.shift();
+            if (t instanceof TFolder) {
+                queue.push(...t.children);
+            } else if (t instanceof TFile) {
+                if (respectModTs) {
+                    const frontcache = cache.getFileCache(t)?.frontmatter;
+                    if (
+                        frontcache &&
+                        frontcache[NOTE_META.modTs] &&
+                        frontcache[NOTE_META.modTs] >= t.stat.mtime
+                    ) {
+                        new Notice(
+                            `Skipping ${t.basename}, due to no content modified.`,
+                            3500,
+                        );
+                        continue;
+                    }
+                }
+                files.push(t);
+            }
+        }
+        await this.refreshContentFrontmatter(files);
+        this.setTask(files.length);
+        new Notice(
+            `Got ${this.waitProcessingTask} nots for publishing...`,
+            5000,
+        );
+        for (const file of files) {
+            this.justPublishContent({ file: file });
+        }
+    }
+
     _checkProjectContentAbPathSetting(validNoticed = false): boolean {
         if (
             checkSettingOfAbPath(
@@ -240,38 +287,20 @@ export default class ContentPublisher extends Plugin {
 
     _addCommandPublishAllNotes(): void {
         this.addCommand({
-            id: 'publish-all-notes',
-            name: 'Publish all notes',
+            id: 'publish-only-modified-notes',
+            name: 'Publish only modified notes',
             callback: async () => {
-                if (!this._checkProjectContentAbPathSetting()) {
-                    return;
-                }
+                this.publishAllNotes();
+            },
+        });
+    }
 
-                new Notice('Preparing to publish all...', 2000);
-                const folder = this.app.vault.getAbstractFileByPath(
-                    this.settings.noteFolder,
-                );
-                const queue: (TAbstractFile | null)[] = [folder];
-                const files = [];
-
-                while (queue.length) {
-                    const t = queue.shift();
-                    if (t instanceof TFolder) {
-                        queue.push(...t.children);
-                    } else if (t instanceof TFile) {
-                        // TODO: respect modTs
-                        files.push(t);
-                    }
-                }
-                await this.refreshContentFrontmatter(files);
-                this.setTask(files.length);
-                new Notice(
-                    `Got ${this.waitProcessingTask} nots for publishing...`,
-                    5000,
-                );
-                for (const file of files) {
-                    this.justPublishContent({ file: file });
-                }
+    _addCommandPublishAllNotesForce(): void {
+        this.addCommand({
+            id: 'publish-or-republish-all-notes',
+            name: 'Publish or republish all notes',
+            callback: async () => {
+                this.publishAllNotes(false);
             },
         });
     }

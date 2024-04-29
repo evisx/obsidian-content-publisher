@@ -33,39 +33,45 @@ export class NoteHandler extends Handler {
         );
     }
 
-    updateNoteMeta(frontmatter: FrontMatterCache, file: TFile): void {
-        // TODO: respect option
+    updateNoteMeta(
+        frontmatter: FrontMatterCache,
+        file: TFile,
+        nowTime: Moment,
+    ): void {
         let pubTime;
-        let modTime;
         if (!frontmatter[NOTE_META.pubUrl]) {
             frontmatter[NOTE_META.pubUrl] = this.generatePobUrl(file);
         }
         if (!frontmatter[NOTE_META.pubTs]) {
-            pubTime = window.moment();
-            frontmatter[NOTE_META.pubTs] = pubTime.valueOf();
+            pubTime = nowTime;
+            frontmatter[NOTE_META.pubTs] = nowTime.valueOf();
+        } else {
+            pubTime = window.moment(frontmatter[NOTE_META.pubTs]);
         }
-        modTime = window.moment(file.stat.mtime);
-        frontmatter[NOTE_META.modTs] = file.stat.mtime;
+        frontmatter[NOTE_META.modTs] = nowTime.valueOf();
 
         const process = this.plugin.getTemplateProcessor({ file: file });
-        process.setModTime(modTime);
-
-        if (pubTime !== undefined) {
-            process.setPubTime(pubTime);
-        }
+        process.setModTime(nowTime);
+        process.setPubTime(pubTime);
     }
 
     async updateFrontmatter(file: TFile): Promise<FrontMatterCache> {
-        return new Promise<FrontMatterCache>((resolve, _reject) => {
-            this.plugin.app.fileManager.processFrontMatter(
-                file,
-                (frontmatter: FrontMatterCache) => {
-                    this.updateNoteMeta(frontmatter, file);
-                    resolve(frontmatter);
-                },
-                file.stat, // keep mtime not change
-            );
-        });
+        const getter: { obj?: FrontMatterCache } = {};
+        const nowTime = window.moment();
+        await this.plugin.app.fileManager.processFrontMatter(
+            file,
+            (frontmatter: FrontMatterCache) => {
+                this.updateNoteMeta(frontmatter, file, nowTime);
+                getter.obj = frontmatter;
+            },
+            {
+                mtime: nowTime.valueOf(),
+            },
+        );
+        if (getter.obj === undefined) {
+            throw Error('failed to update frontmatter');
+        }
+        return getter.obj;
     }
 }
 
@@ -101,22 +107,30 @@ export class ContentHandler extends Handler {
         return (await this.getContentWithoutFrontMatter(file)).replace(
             /\[\[(.*?)\]\]/g,
             (_match, refer) => {
-                let tplProc;
-                const linkFile = cache.getFirstLinkpathDest(refer, file.path);
+                const texts = refer.split('|');
+                const links = texts[0].split(/[#]+/); // anchor
+                const linkFile = cache.getFirstLinkpathDest(
+                    links[0],
+                    file.path,
+                );
+                const tplProc = tplProcManager.getProcessor({
+                    file: linkFile ? linkFile : file,
+                });
+                tplProc.setRefer(texts.length > 1 ? texts[1] : refer);
                 if (!linkFile) {
                     new Notice(`Note of [[${refer}]] not found!`, 2000);
-                    tplProc = tplProcManager.getProcessor({ file: file });
-                    tplProc.setRefer(refer);
                     return tplProc.evalTemplate(notFound);
                 }
-
-                tplProc = tplProcManager.getProcessor({ file: linkFile });
-                tplProc.setRefer(refer);
-                return tplProc.evalTemplateWithTryList([
+                const link = tplProc.evalTemplateWithTryList([
                     major,
                     minor,
                     notFound,
                 ]);
+                // TODO: anchor support?
+                if (links.length > 1) {
+                    return link.replace(/\)$/, `#${links[1]})`);
+                }
+                return link;
             },
         );
     }
